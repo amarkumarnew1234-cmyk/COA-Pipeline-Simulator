@@ -3,107 +3,66 @@ from pipeline import PipelineSimulator
 
 
 program = [
-    "ADD R1, R2, R3",
-    "SUB R4, R1, R5",
-    "MUL R6, R4, R2"
+    "LOAD R1, 0(R2)",
+    "ADD R3, R1, R4",
+    "SUB R5, R3, R6"
 ]
 
 
 def create_instructions():
-
     return [
         parse_instruction(text)
         for text in program
     ]
 
 
-# ==========================================
-# TEST 1: FORWARDING OFF
-# ==========================================
+def run_test(forwarding):
 
-instructions_without_forwarding = (
-    create_instructions()
-)
+    instructions = create_instructions()
 
-simulator_without_forwarding = (
-    PipelineSimulator(
-        instructions_without_forwarding,
-        forwarding=False
+    simulator = PipelineSimulator(
+        instructions,
+        forwarding=forwarding
     )
-)
 
-simulator_without_forwarding.run()
+    simulator.run()
 
-print(
-    "\n\n========================================"
-)
-print(
-    "       TEST 1: FORWARDING OFF"
-)
-print(
-    "========================================"
-)
+    print("\n")
+    print("=" * 50)
 
-simulator_without_forwarding.print_timing_table()
+    if forwarding:
+        print("TEST: FORWARDING ON")
+    else:
+        print("TEST: FORWARDING OFF")
 
-simulator_without_forwarding.print_hazard_report()
+    print("=" * 50)
+
+    simulator.print_timing_table()
+    simulator.print_hazard_report()
+
+    return simulator
 
 
 # ==========================================
-# TEST 2: FORWARDING ON
+# FORWARDING OFF
 # ==========================================
 
-instructions_with_forwarding = (
-    create_instructions()
-)
+without_forwarding = run_test(False)
 
-simulator_with_forwarding = (
-    PipelineSimulator(
-        instructions_with_forwarding,
-        forwarding=True
-    )
-)
 
-simulator_with_forwarding.run()
+# ==========================================
+# FORWARDING ON
+# ==========================================
 
-print(
-    "\n\n========================================"
-)
-print(
-    "        TEST 2: FORWARDING ON"
-)
-print(
-    "========================================"
-)
-
-simulator_with_forwarding.print_timing_table()
-
-simulator_with_forwarding.print_hazard_report()
+with_forwarding = run_test(True)
 
 
 # ==========================================
 # COMPARISON
 # ==========================================
 
-cycles_without = len(
-    simulator_without_forwarding.history
-)
-
-cycles_with = len(
-    simulator_with_forwarding.history
-)
-
-stalls_without = (
-    simulator_without_forwarding.total_stalls
-)
-
-stalls_with = (
-    simulator_with_forwarding.total_stalls
-)
-
-
 print(
-    "\n\n========== FORWARDING COMPARISON ==========\n"
+    "\n========== LOAD-USE COMPARISON ==========\n"
 )
 
 print(
@@ -116,18 +75,18 @@ print("-" * 49)
 
 print(
     f"{'Execution Cycles':<25}"
-    f"{cycles_without:<12}"
-    f"{cycles_with:<12}"
+    f"{len(without_forwarding.history):<12}"
+    f"{len(with_forwarding.history):<12}"
 )
 
 print(
     f"{'Stall Cycles':<25}"
-    f"{stalls_without:<12}"
-    f"{stalls_with:<12}"
+    f"{without_forwarding.total_stalls:<12}"
+    f"{with_forwarding.total_stalls:<12}"
 )
 
 print(
     f"{'Data Hazards':<25}"
-    f"{len(simulator_without_forwarding.data_hazards):<12}"
-    f"{len(simulator_with_forwarding.data_hazards):<12}"
+    f"{len(without_forwarding.data_hazards):<12}"
+    f"{len(with_forwarding.data_hazards):<12}"
 )
