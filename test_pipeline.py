@@ -9,32 +9,125 @@ program = [
 ]
 
 
-instructions = [
-    parse_instruction(text)
-    for text in program
-]
+def create_instructions():
+
+    return [
+        parse_instruction(text)
+        for text in program
+    ]
 
 
-simulator = PipelineSimulator(instructions)
+# ==========================================
+# TEST 1: FORWARDING OFF
+# ==========================================
 
-history = simulator.run()
+instructions_without_forwarding = (
+    create_instructions()
+)
+
+simulator_without_forwarding = (
+    PipelineSimulator(
+        instructions_without_forwarding,
+        forwarding=False
+    )
+)
+
+simulator_without_forwarding.run()
+
+print(
+    "\n\n========================================"
+)
+print(
+    "       TEST 1: FORWARDING OFF"
+)
+print(
+    "========================================"
+)
+
+simulator_without_forwarding.print_timing_table()
+
+simulator_without_forwarding.print_hazard_report()
 
 
-print("\n========== PIPELINE EXECUTION ==========\n")
+# ==========================================
+# TEST 2: FORWARDING ON
+# ==========================================
 
-for cycle_number, state in enumerate(history, start=1):
-    print(f"Cycle {cycle_number}")
+instructions_with_forwarding = (
+    create_instructions()
+)
 
-    for stage in PipelineSimulator.STAGES:
-        instruction = state[stage]
+simulator_with_forwarding = (
+    PipelineSimulator(
+        instructions_with_forwarding,
+        forwarding=True
+    )
+)
 
-        if instruction is None:
-            print(f"  {stage:<4}: EMPTY")
-        else:
-            print(f"  {stage:<4}: {instruction}")
+simulator_with_forwarding.run()
 
-    print()
+print(
+    "\n\n========================================"
+)
+print(
+    "        TEST 2: FORWARDING ON"
+)
+print(
+    "========================================"
+)
+
+simulator_with_forwarding.print_timing_table()
+
+simulator_with_forwarding.print_hazard_report()
 
 
-simulator.print_timing_table()
-simulator.print_hazard_report()
+# ==========================================
+# COMPARISON
+# ==========================================
+
+cycles_without = len(
+    simulator_without_forwarding.history
+)
+
+cycles_with = len(
+    simulator_with_forwarding.history
+)
+
+stalls_without = (
+    simulator_without_forwarding.total_stalls
+)
+
+stalls_with = (
+    simulator_with_forwarding.total_stalls
+)
+
+
+print(
+    "\n\n========== FORWARDING COMPARISON ==========\n"
+)
+
+print(
+    f"{'Parameter':<25}"
+    f"{'OFF':<12}"
+    f"{'ON':<12}"
+)
+
+print("-" * 49)
+
+print(
+    f"{'Execution Cycles':<25}"
+    f"{cycles_without:<12}"
+    f"{cycles_with:<12}"
+)
+
+print(
+    f"{'Stall Cycles':<25}"
+    f"{stalls_without:<12}"
+    f"{stalls_with:<12}"
+)
+
+print(
+    f"{'Data Hazards':<25}"
+    f"{len(simulator_without_forwarding.data_hazards):<12}"
+    f"{len(simulator_with_forwarding.data_hazards):<12}"
+)
