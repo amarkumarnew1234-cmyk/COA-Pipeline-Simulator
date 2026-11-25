@@ -4,8 +4,11 @@ from pipeline import PipelineSimulator
 
 program = [
     "LOAD R1, 0(R2)",
-    "ADD R3, R1, R4",
-    "SUB R5, R3, R6"
+    "ADD R3, R4, R5",
+    "SUB R6, R7, R8",
+    "MUL R9, R10, R11",
+    "ADD R12, R13, R14",
+    "SUB R15, R3, R4"
 ]
 
 
@@ -16,26 +19,30 @@ def create_instructions():
     ]
 
 
-def run_test(forwarding):
-
+def run_test(shared_memory):
     instructions = create_instructions()
 
     simulator = PipelineSimulator(
         instructions,
-        forwarding=forwarding
+        forwarding=True,
+        shared_memory=shared_memory
     )
 
     simulator.run()
 
     print("\n")
-    print("=" * 50)
+    print("=" * 55)
 
-    if forwarding:
-        print("TEST: FORWARDING ON")
+    if shared_memory:
+        print(
+            "TEST: SHARED MEMORY - STRUCTURAL HAZARDS ENABLED"
+        )
     else:
-        print("TEST: FORWARDING OFF")
+        print(
+            "TEST: SEPARATE MEMORY - NO IF/MEM CONFLICT"
+        )
 
-    print("=" * 50)
+    print("=" * 55)
 
     simulator.print_timing_table()
     simulator.print_hazard_report()
@@ -44,17 +51,17 @@ def run_test(forwarding):
 
 
 # ==========================================
-# FORWARDING OFF
+# TEST 1: SEPARATE INSTRUCTION/DATA MEMORY
 # ==========================================
 
-without_forwarding = run_test(False)
+separate_memory = run_test(False)
 
 
 # ==========================================
-# FORWARDING ON
+# TEST 2: SHARED MEMORY
 # ==========================================
 
-with_forwarding = run_test(True)
+shared_memory = run_test(True)
 
 
 # ==========================================
@@ -62,31 +69,31 @@ with_forwarding = run_test(True)
 # ==========================================
 
 print(
-    "\n========== LOAD-USE COMPARISON ==========\n"
+    "\n========== STRUCTURAL HAZARD COMPARISON ==========\n"
 )
 
 print(
-    f"{'Parameter':<25}"
-    f"{'OFF':<12}"
-    f"{'ON':<12}"
+    f"{'Parameter':<28}"
+    f"{'Separate':<12}"
+    f"{'Shared':<12}"
 )
 
-print("-" * 49)
+print("-" * 52)
 
 print(
-    f"{'Execution Cycles':<25}"
-    f"{len(without_forwarding.history):<12}"
-    f"{len(with_forwarding.history):<12}"
-)
-
-print(
-    f"{'Stall Cycles':<25}"
-    f"{without_forwarding.total_stalls:<12}"
-    f"{with_forwarding.total_stalls:<12}"
+    f"{'Execution Cycles':<28}"
+    f"{len(separate_memory.history):<12}"
+    f"{len(shared_memory.history):<12}"
 )
 
 print(
-    f"{'Data Hazards':<25}"
-    f"{len(without_forwarding.data_hazards):<12}"
-    f"{len(with_forwarding.data_hazards):<12}"
+    f"{'Structural Hazards':<28}"
+    f"{len(separate_memory.structural_hazards):<12}"
+    f"{len(shared_memory.structural_hazards):<12}"
+)
+
+print(
+    f"{'Structural Stall Cycles':<28}"
+    f"{separate_memory.structural_stalls:<12}"
+    f"{shared_memory.structural_stalls:<12}"
 )
