@@ -1,99 +1,89 @@
-from parser import parse_instruction
+from program import Program
 from pipeline import PipelineSimulator
 
 
-program = [
-    "LOAD R1, 0(R2)",
-    "ADD R3, R4, R5",
-    "SUB R6, R7, R8",
-    "MUL R9, R10, R11",
-    "ADD R12, R13, R14",
-    "SUB R15, R3, R4"
+program_lines = [
+
+    "ADD R4, R1, R2",
+
+    "BEQ R4, R3, TARGET",
+
+    "SUB R5, R1, R2",
+
+    "MUL R6, R1, R2",
+
+    "TARGET:",
+
+    "ADD R7, R4, R3"
 ]
 
 
-def create_instructions():
-    return [
-        parse_instruction(text)
-        for text in program
-    ]
-
-
-def run_test(shared_memory):
-    instructions = create_instructions()
-
-    simulator = PipelineSimulator(
-        instructions,
-        forwarding=True,
-        shared_memory=shared_memory
-    )
-
-    simulator.run()
-
-    print("\n")
-    print("=" * 55)
-
-    if shared_memory:
-        print(
-            "TEST: SHARED MEMORY - STRUCTURAL HAZARDS ENABLED"
-        )
-    else:
-        print(
-            "TEST: SEPARATE MEMORY - NO IF/MEM CONFLICT"
-        )
-
-    print("=" * 55)
-
-    simulator.print_timing_table()
-    simulator.print_hazard_report()
-
-    return simulator
-
-
-# ==========================================
-# TEST 1: SEPARATE INSTRUCTION/DATA MEMORY
-# ==========================================
-
-separate_memory = run_test(False)
-
-
-# ==========================================
-# TEST 2: SHARED MEMORY
-# ==========================================
-
-shared_memory = run_test(True)
-
-
-# ==========================================
-# COMPARISON
-# ==========================================
-
-print(
-    "\n========== STRUCTURAL HAZARD COMPARISON ==========\n"
+program = Program(
+    program_lines
 )
 
-print(
-    f"{'Parameter':<28}"
-    f"{'Separate':<12}"
-    f"{'Shared':<12}"
+
+simulator = PipelineSimulator(
+    program,
+    forwarding=True,
+    shared_memory=False
 )
 
-print("-" * 52)
 
-print(
-    f"{'Execution Cycles':<28}"
-    f"{len(separate_memory.history):<12}"
-    f"{len(shared_memory.history):<12}"
+# ==========================================
+# INITIAL REGISTER VALUES
+# ==========================================
+
+simulator.set_register(
+    "R1",
+    10
 )
 
-print(
-    f"{'Structural Hazards':<28}"
-    f"{len(separate_memory.structural_hazards):<12}"
-    f"{len(shared_memory.structural_hazards):<12}"
+simulator.set_register(
+    "R2",
+    20
 )
 
-print(
-    f"{'Structural Stall Cycles':<28}"
-    f"{separate_memory.structural_stalls:<12}"
-    f"{shared_memory.structural_stalls:<12}"
+simulator.set_register(
+    "R3",
+    30
 )
+
+
+print(
+    "\n========== INITIAL PROGRAM =========="
+)
+
+program.print_program()
+
+
+print(
+    "\n========== INITIAL REGISTERS =========="
+)
+
+simulator.cpu.print_registers()
+
+
+# ==========================================
+# RUN SIMULATION
+# ==========================================
+
+simulator.run()
+
+
+# ==========================================
+# RESULTS
+# ==========================================
+
+simulator.print_timing_table()
+
+simulator.print_execution_log()
+
+simulator.print_hazard_report()
+
+
+print(
+    "\n========== FINAL REGISTERS =========="
+)
+
+simulator.cpu.print_registers()
