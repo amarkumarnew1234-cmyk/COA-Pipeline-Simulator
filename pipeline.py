@@ -32,8 +32,21 @@ class PipelineSimulator:
 
         self.cycle = 0
 
+        # Complete cycle-by-cycle history
         self.history = []
+
+        # Which instruction was stalled in each cycle
         self.stall_history = []
+
+        # Instructions flushed in each cycle
+        # Example:
+        # [
+        #     [],
+        #     [],
+        #     [instruction1, instruction2],
+        #     ...
+        # ]
+        self.flush_history = []
 
         # ------------------------------------------
         # Hazard statistics
@@ -76,7 +89,7 @@ class PipelineSimulator:
         )
 
     # ==============================================
-    # REGISTER INITIALIZATION
+    # REGISTER / MEMORY INITIALIZATION
     # ==============================================
 
     def set_register(self, register, value):
@@ -195,23 +208,25 @@ class PipelineSimulator:
             return False
 
         # Without forwarding:
-        # wait until producer has passed MEM.
+        # consumer waits while producer is
+        # still in EX or MEM.
         if not self.forwarding:
             return True
 
         # With forwarding:
-        # only immediate LOAD-use needs a stall.
+        # ordinary ALU dependencies can forward.
+        # Immediate LOAD-use still needs one stall.
         for dependency in dependencies:
 
             producer = dependency["producer"]
 
-            stage = dependency[
+            producer_stage = dependency[
                 "producer_stage"
             ]
 
             if (
                 producer.opcode == "LOAD"
-                and stage == "EX"
+                and producer_stage == "EX"
             ):
                 return True
 
@@ -278,15 +293,15 @@ class PipelineSimulator:
         branch = self.pipeline["EX"]
 
         if branch is None:
-            return False
+            return None
 
         if branch.opcode != "BEQ":
-            return False
+            return None
 
         branch_key = id(branch)
 
         if branch_key in self._resolved_branches:
-            return False
+            return None
 
         self._resolved_branches.add(
             branch_key
@@ -297,12 +312,12 @@ class PipelineSimulator:
         )
 
         if result is None:
-            return False
+            return None
 
         taken = result["taken"]
 
         # ------------------------------------------
-        # NOT TAKEN
+        # BRANCH NOT TAKEN
         # ------------------------------------------
 
         if not taken:
@@ -312,13 +327,17 @@ class PipelineSimulator:
                 "branch": branch,
                 "taken": False,
                 "target": branch.label,
-                "flushed": 0
+                "flushed": 0,
+                "flushed_instructions": []
             })
 
-            return False
+            return {
+                "taken": False,
+                "flushed_instructions": []
+            }
 
         # ------------------------------------------
-        # TAKEN
+        # BRANCH TAKEN
         # ------------------------------------------
 
         target_index = (
@@ -327,13 +346,21 @@ class PipelineSimulator:
             )
         )
 
-        flushed = 0
+        flushed_instructions = []
 
         if self.pipeline["ID"] is not None:
-            flushed += 1
+            flushed_instructions.append(
+                self.pipeline["ID"]
+            )
 
         if self.pipeline["IF"] is not None:
-            flushed += 1
+            flushed_instructions.append(
+                self.pipeline["IF"]
+            )
+
+        flushed_count = len(
+            flushed_instructions
+        )
 
         self.control_hazards.append({
             "cycle": self.cycle,
@@ -341,19 +368,27 @@ class PipelineSimulator:
             "taken": True,
             "target": branch.label,
             "target_index": target_index,
-            "flushed": flushed
+            "flushed": flushed_count,
+            "flushed_instructions":
+                flushed_instructions.copy()
         })
 
-        self.control_penalty += flushed
+        self.control_penalty += (
+            flushed_count
+        )
 
-        # Redirect PC
+        # Redirect Program Counter
         self.pc = target_index
 
-        # Flush younger instructions
+        # Remove wrong-path younger instructions
         self.pipeline["ID"] = None
         self.pipeline["IF"] = None
 
-        return True
+        return {
+            "taken": True,
+            "flushed_instructions":
+                flushed_instructions
+        }
 
     # ==============================================
     # FETCH
@@ -382,13 +417,27 @@ class PipelineSimulator:
 
         self.cycle += 1
 
+        # Every cycle starts with no flush.
+        flushed_this_cycle = []
+
         # ------------------------------------------
-        # 1. Resolve branch currently in EX
+        # 1. RESOLVE BRANCH CURRENTLY IN EX
         # ------------------------------------------
 
-        branch_taken = self.resolve_branch()
+        branch_result = (
+            self.resolve_branch()
+        )
 
-        if branch_taken:
+        if (
+            branch_result is not None
+            and branch_result["taken"]
+        ):
+
+            flushed_this_cycle = (
+                branch_result[
+                    "flushed_instructions"
+                ]
+            )
 
             # Older instructions continue.
             self.pipeline["WB"] = (
@@ -401,9 +450,10 @@ class PipelineSimulator:
 
             self.pipeline["EX"] = None
 
-            # ID and IF already flushed.
+            # ID and IF were flushed by
+            # resolve_branch().
 
-            # Fetch correct branch target.
+            # Immediately fetch from correct target.
             self.pipeline["IF"] = (
                 self.fetch_instruction()
             )
@@ -412,7 +462,13 @@ class PipelineSimulator:
                 self.pipeline.copy()
             )
 
-            self.stall_history.append(None)
+            self.stall_history.append(
+                None
+            )
+
+            self.flush_history.append(
+                flushed_this_cycle.copy()
+            )
 
             return
 
@@ -436,6 +492,7 @@ class PipelineSimulator:
 
             self.data_stalls += 1
 
+            # Older instructions continue.
             self.pipeline["WB"] = (
                 self.pipeline["MEM"]
             )
@@ -444,16 +501,24 @@ class PipelineSimulator:
                 self.pipeline["EX"]
             )
 
+            # Bubble inserted into EX.
             self.pipeline["EX"] = None
 
-            stalled = self.pipeline["ID"]
+            # IF and ID remain frozen.
+            stalled_instruction = (
+                self.pipeline["ID"]
+            )
 
             self.history.append(
                 self.pipeline.copy()
             )
 
             self.stall_history.append(
-                stalled
+                stalled_instruction
+            )
+
+            self.flush_history.append(
+                []
             )
 
             return
@@ -551,14 +616,20 @@ class PipelineSimulator:
             )
 
         # ------------------------------------------
-        # 8. SAVE STATE
+        # 8. SAVE CYCLE STATE
         # ------------------------------------------
 
         self.history.append(
             self.pipeline.copy()
         )
 
-        self.stall_history.append(None)
+        self.stall_history.append(
+            None
+        )
+
+        self.flush_history.append(
+            []
+        )
 
     # ==============================================
     # RUN COMPLETE PROGRAM
@@ -570,7 +641,7 @@ class PipelineSimulator:
 
             self.run_cycle()
 
-        # Remove final empty state
+        # Remove final completely empty state.
         if self.history and all(
             value is None
             for value
@@ -578,7 +649,11 @@ class PipelineSimulator:
         ):
 
             self.history.pop()
+
             self.stall_history.pop()
+
+            self.flush_history.pop()
+
             self.cycle -= 1
 
         return self.history
@@ -616,7 +691,7 @@ class PipelineSimulator:
         ):
 
             print(
-                f"C{cycle:<4}",
+                f"C{cycle:<5}",
                 end=""
             )
 
@@ -625,7 +700,7 @@ class PipelineSimulator:
         print(
             "-" * (
                 24
-                + len(self.history) * 5
+                + len(self.history) * 6
             )
         )
 
@@ -642,7 +717,15 @@ class PipelineSimulator:
 
                 stage_name = ""
 
+                # Flush gets highest display priority.
                 if (
+                    instruction
+                    in self.flush_history[index]
+                ):
+
+                    stage_name = "FL"
+
+                elif (
                     self.stall_history[index]
                     is instruction
                 ):
@@ -662,7 +745,7 @@ class PipelineSimulator:
                             break
 
                 print(
-                    f"{stage_name:<5}",
+                    f"{stage_name:<6}",
                     end=""
                 )
 
@@ -762,5 +845,26 @@ class PipelineSimulator:
                     "  Flushed :",
                     hazard["flushed"]
                 )
+
+                if (
+                    hazard[
+                        "flushed_instructions"
+                    ]
+                ):
+
+                    print(
+                        "  Flushed Instructions:"
+                    )
+
+                    for instruction in (
+                        hazard[
+                            "flushed_instructions"
+                        ]
+                    ):
+
+                        print(
+                            "    -",
+                            instruction
+                        )
 
                 print()
